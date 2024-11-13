@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Union, List
 
 from mrmr import mrmr_classif
+from sklearn.feature_selection import mutual_info_classif
 from sklearn.model_selection import GridSearchCV, StratifiedGroupKFold
 
 class FeatureSelectionCV:
@@ -51,7 +52,7 @@ class FeatureSelectionCV:
 	
 	def calculate_feature_importances(self, X, y, K=None):
 		"""
-		Calculates the feature importances using the MRMr algorithm
+		Calculates the feature importances using the Mutual Information algorithm
 		
 		Parameters
 		----------

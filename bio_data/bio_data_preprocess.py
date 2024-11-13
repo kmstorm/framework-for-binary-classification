@@ -21,6 +21,9 @@ class BioDataPreprocess:
 	data : DataFrame
 		The input data used for the training
 
+	feature_group : list
+        List of feature groups to used for the training
+
 	target_column : str
 		The name of the column in the dataset that is to be predicted by the model
 
@@ -43,8 +46,9 @@ class BioDataPreprocess:
 		Random seed to make the iterative imputer deterministic
 	"""
 	def __init__(self, data: pd.DataFrame,
-				 target_column: str,
 				 base_model,
+				 target_column: str,
+				 feature_group: list=['original', 'log', 'wavelet'],
 				 smote: bool=False,
 				 drop_threshold: int=0.3,
 				 normalizer: str=None,
@@ -52,8 +56,9 @@ class BioDataPreprocess:
 				 real_impute: str='mean', 
 				 random_state=42):
 		self.data = data
-		self.target_column = target_column
 		self.base_model = base_model
+		self.target_column = target_column
+		self.feature_group = feature_group
 		self.random_state = random_state
 		self.smote = smote
 		self.drop_threshold = drop_threshold
@@ -91,7 +96,7 @@ class BioDataPreprocess:
 		Returns
 		-------
 		X : 2d array-like
-			Array of features
+			Array of features by chosen groups
 
 		y : 1d array-like
 			Array of labels
@@ -99,10 +104,10 @@ class BioDataPreprocess:
 		pipeline : Pipeline
 			the trining pipeline
 		"""
-		X = self.data
+		X = self.__preprocess_feature_groups()
+		y = self.data[self.target_column]
 		X = X.loc[X.isna().mean(axis=1) < self.drop_threshold, X.isna().mean(axis=0) < self.drop_threshold]
-		y = X[self.target_column]
-		X = X.drop([self.target_column], axis=1)
+		# X = X.drop([self.target_column], axis=1)
 
 		
 		real_columns = [col for col in X if len(X[col].dropna().unique()) > 10]
@@ -137,4 +142,29 @@ class BioDataPreprocess:
 	def __preprocess_categorical_columns(self):
 		imputer = get_categorical_imputer(self.categorical_impute)
 		return Pipeline(steps=[('imputer', imputer)])
+	
+	def __preprocess_feature_groups(self):
+		"""
+        Process the data according to the specified feature groups
+        """
+        # Identify the columns belonging to each feature group
+		original_features = [col for col in self.data.columns if col.startswith('original')]
+		log_features = [col for col in self.data.columns if col.startswith('log')]
+		wavelet_features = [col for col in self.data.columns if col.startswith('wavelet')]
+
+        # Create a dictionary to hold the feature groups
+		feature_groups = {
+            'original': original_features,
+            'log': log_features,
+            'wavelet': wavelet_features
+        }
+
+        # Filter the data according to the specified feature groups
+		selected_features = []
+		for group in self.feature_group:
+			selected_features.extend(feature_groups.get(group, []))
+
+        # Filter the data
+		return self.data[selected_features]
+
 		
