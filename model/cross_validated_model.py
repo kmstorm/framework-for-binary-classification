@@ -64,7 +64,7 @@ class CrossValidatedModel:
 		self.do_feature_selection = do_feature_selection
 		self.feature_selection_params = feature_selection_params
 
-	def fit_gs(self, X, y):
+	def fit_gs(self, X, y, bigX, bigY, pairs):
 		"""
 		fit a model on each of the cv folds using grid search and feature selection
 
@@ -77,11 +77,11 @@ class CrossValidatedModel:
 			Array of labels
 		"""
 		if self.do_feature_selection:
-			self.__feature_selection_gs(X, y)
+			self.__feature_selection_gs(X, y, bigX, bigY, pairs)
 		else:
 			self.__do_grid_serach(X, y)
 	
-	def cross_validate(self, X, y, confidence=0.95):
+	def cross_validate(self, X, y, bigX, bigY, pairs, confidence=0.95):
 		"""
 		Validate each fit models on the corresponding test set
 		
@@ -107,8 +107,10 @@ class CrossValidatedModel:
 		out : dict
 			Dictionary of the evaluation metrics
 		"""
+
 		if len(self.fit_models) == 0:
-			self.fit_gs(X, y)
+			self.fit_gs(X, y, bigX, bigY, pairs)
+
 		tprs = []
 		mean_fpr = np.linspace(0, 1, 100)
 		
@@ -131,9 +133,8 @@ class CrossValidatedModel:
 				X_test = self.feature_selectors[i].transform(X.iloc[test])
 			else:
 				X_test = X.iloc[test]
-				
+
 			clf = self.fit_models[i]
-			
 			y_proba = clf.predict_proba(X_test)[:,1]
 			ax_roc, viz_roc = self.__plot_roc_fold(y.iloc[test], y_proba, ax_roc, i)
 				
@@ -146,7 +147,6 @@ class CrossValidatedModel:
 			
 			interp_prec = np.interp(mean_recall, np.flip(viz_pr.recall), np.flip(viz_pr.precision))
 			precs.append(interp_prec)
-			
 			aucs.append(viz_roc.roc_auc)
 			aps.append(viz_pr.average_precision)
 
@@ -191,7 +191,6 @@ class CrossValidatedModel:
 		out['average_precision_mean'] = ap_mean
 		out['average_precision_lower'] = ap_lower
 		out['average_precision_upper'] = ap_upper
-
 		return fig_roc, fig_pr, out
 
 	def predict_proba(self, X):
@@ -278,27 +277,38 @@ class CrossValidatedModel:
 			)
 		return ax, viz
 	
-	def __feature_selection_gs(self, X, y):
+	def __feature_selection_gs(self, X, y, bigX, bigY, pairs):
 		for i, (train, test) in enumerate(self.cv.split(X, y)):
+			for idx1, idx2 in pairs:
+				if idx1 in train:
+					train = np.append(train, idx2)
 			fs = FeatureSelectionCV(self.base_model,
 									self.param_grid,
 									scoring='roc_auc',
 									cv=self.cv,
 									n_jobs=self.n_jobs,
 									**self.feature_selection_params)
+			
+			
 			w_train = None
 			if self.weighted:
-				w_train = compute_sample_weight('balanced', y.iloc[train])
+				w_train = compute_sample_weight('balanced', bigY.iloc[train])
+				
+			fs.fit(bigX.iloc[train], bigY.iloc[train], classifier__sample_weight=w_train)	
 
-			fs.fit(X.iloc[train], y.iloc[train], classifier__sample_weight=w_train)
 			print(f'fold_{i} {len(fs.best_features_)} features: roc_auc: {fs.best_score_: .4f}')
+
 			self.feature_selectors.append(fs)
 			self.fit_models.append(fs.best_estimator_)
 			self.best_hyperparams.append(fs.best_params_)
 			self.best_features.update(fs.best_features_)
 	
-	def __do_grid_serach(self, X, y):
+	def __do_grid_serach(self, X, y, bigX, bigY, pairs):
 		for i, (train, test) in enumerate(self.cv.split(X, y)):
+			for idx1, idx2 in pairs:
+				if idx1 in train:
+					train = np.append(train, idx2)
+
 			gs = GridSearchCV(self.base_model,
 							  self.param_grid,
 							  scoring='roc_auc',
@@ -309,6 +319,6 @@ class CrossValidatedModel:
 			if self.weighted:
 				w_train = compute_sample_weight('balanced', y.iloc[train])
 
-			gs.fit(X.iloc[train], y.iloc[train], classifier__sample_weight=w_train)
+			gs.fit(bigX.iloc[train], bigY.iloc[train], classifier__sample_weight=w_train)
 			self.fit_models.append(gs.best_estimator_)
 			print(f'fold_{i}: gs_roc: {gs.best_score_}')

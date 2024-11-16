@@ -19,7 +19,7 @@ import shap
 from utils.utils import scores_with_optimal_cutoff, load_data, load_model, get_config, simplify_cross_val_result
 warnings.filterwarnings("ignore")
 
-def train_and_evaluate_model(data_path: str, config_path: str = None, target_folder: str = '.', calculate_feature_importances: bool = False):
+def train_and_evaluate_model(data_path: str, augmentation_path: str = None, config_path: str = None,  target_folder: str = '.', calculate_feature_importances: bool = False):
 	"""
 	Trains and evaluates a new model using a given dataset
 	
@@ -46,21 +46,28 @@ def train_and_evaluate_model(data_path: str, config_path: str = None, target_fol
 	shutil.copy(config_path, target_folder / config_path.name)
 	
 	data = pd.read_csv(data_path)
+	augmented_data = pd.read_csv(augmentation_path)
 	config = get_config(config_path)
 	param_grid = config['param_grid']
 	#param_grid = get_param_grid_from_config(param_grid_path=param_grid_path)
-	X, y, pipeline = BioDataPreprocess(data,
+	X, y, bigX, bigY, index_pairs, pipeline = BioDataPreprocess(data, augmented_data,
 										base_model=config['base_model'],
 										random_state=config['random_state'],
 										**config['preprocess']).prerocess_and_create_pipeline()
+	
 	model = CrossValidatedModel(pipeline, param_grid,
 								random_state=config['random_state'],
 								do_feature_selection=config['do_feature_selection'],
 								feature_selection_params=config.get('feature_selection_params', None))
-	model.fit_gs(X, y)
+	
+
+	bigX.to_csv("../temp/bigX.csv")
+	
+	model.fit_gs(X, y, bigX, bigY, index_pairs)
+
 	dill.dump(model, open(target_folder / 'model.pickle', 'wb'))
 	
-	fig_roc, fig_pr, out = model.cross_validate(X, y)
+	fig_roc, fig_pr, out = model.cross_validate(X, y, bigX, bigY, index_pairs)
 
 	result = pd.DataFrame(out, index=[config.get('model_name', 0)])
 	result.to_csv(target_folder / 'cross_val_result.csv', index=True)
@@ -194,15 +201,14 @@ def feature_importanes(model, X, target_folder):
 	def predict_proba_1(X_in):
 		X_in = pd.DataFrame(X_in, columns=X.columns)
 		return model.predict_proba(X_in)[:,1]
-		
 	explainer  = shap.explainers.Sampling(predict_proba_1, X)
 	shap_values = explainer(X)
-	
+	print(210)
 	mean_shap = np.mean(shap_values.abs.values, axis=0)
-	
+	print(212)
 	features = shap_values.feature_names
 	importances = pd.DataFrame({'col_name': features, 'mean_abs_shap_values': mean_shap})
-	
+	print(215)
 	importances.to_csv(target_folder / 'feature_importances.csv')
 
 	shap.summary_plot(shap_values, X, show=False)

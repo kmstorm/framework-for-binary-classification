@@ -1,3 +1,4 @@
+import warnings
 import numpy as np
 import pandas as pd
 import matplotlib.pylab as plt
@@ -8,6 +9,7 @@ from typing import Union, List
 from mrmr import mrmr_classif
 from sklearn.feature_selection import mutual_info_classif
 from sklearn.model_selection import GridSearchCV, StratifiedGroupKFold
+warnings.filterwarnings("ignore")
 
 class FeatureSelectionCV:
 	"""
@@ -90,7 +92,11 @@ class FeatureSelectionCV:
 		"""
 		current_features = self.calculate_feature_importances(X, y, None)
 		gs = GridSearchCV(self.estimator, self.hyper_params, scoring=self.scoring, cv = self.cv, error_score='raise', n_jobs=self.n_jobs)
+		
+		print(self.hyper_params)
+
 		gs.fit(X, y, **fit_params)
+
 		initial_score = gs.best_score_
 		print(f'{X.shape[1]} features: {self.scoring}: {initial_score: .4f} +/- {gs.cv_results_["std_test_score"][gs.best_index_]: .4f}')
 		if self.max_features > X.shape[1]:

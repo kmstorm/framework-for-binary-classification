@@ -1,3 +1,4 @@
+import warnings
 import os
 import sys
 import numpy as np
@@ -14,6 +15,7 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.neural_network import MLPClassifier
 from sklearn.svm import SVC
 from xgboost import XGBClassifier
+warnings.filterwarnings("ignore")
 
 class CalibratedRF(BaseEstimator):
 	"""
